@@ -1,1 +1,223 @@
+import React, { useEffect, useState, useRef } from "react";
+import "./App.css"; // 適宜スタイル調整してください
+
+const GAME_WIDTH = 800;
+const GAME_HEIGHT = 600;
+const PLAYER_SPEED = 5;
+const BULLET_SPEED = 7;
+const ENEMY_SPEED = 2;
+const ENEMY_BULLET_SPEED = 4;
+const PLAYER_LIFE = 3;
+
+function App() {
+  const [player, setPlayer] = useState({ x: 50, y: GAME_HEIGHT / 2, life: PLAYER_LIFE });
+  const [bullets, setBullets] = useState([]);
+  const [enemies, setEnemies] = useState([]);
+  const [enemyBullets, setEnemyBullets] = useState([]);
+  const [score, setScore] = useState(0);
+  const keys = useRef({});
+  const lastShotTime = useRef(0);
+
+  useEffect(() => {
+    const handleKeyDown = (e) => { keys.current[e.key] = true; };
+    const handleKeyUp = (e) => { keys.current[e.key] = false; };
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
+
+    const gameLoop = setInterval(() => {
+      updatePlayer();
+      updateBullets();
+      updateEnemies();
+      updateEnemyBullets();
+      checkCollisions();
+      spawnEnemies();
+    }, 20);
+
+    return () => {
+      clearInterval(gameLoop);
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
+    };
+  }, [player, bullets, enemies, enemyBullets]);
+
+  const updatePlayer = () => {
+    let { x, y } = player;
+    if (keys.current["ArrowUp"]) y -= PLAYER_SPEED;
+    if (keys.current["ArrowDown"]) y += PLAYER_SPEED;
+    if (keys.current["ArrowLeft"]) x -= PLAYER_SPEED;
+    if (keys.current["ArrowRight"]) x += PLAYER_SPEED;
+
+    // 画面内に制限
+    x = Math.max(0, Math.min(GAME_WIDTH - 40, x));
+    y = Math.max(0, Math.min(GAME_HEIGHT - 40, y));
+
+    // 連射
+    if (keys.current[" "] && Date.now() - lastShotTime.current > 200) {
+      setBullets((prev) => [...prev, { x: x + 40, y: y + 15 }]);
+      lastShotTime.current = Date.now();
+    }
+
+    setPlayer({ ...player, x, y });
+  };
+
+  const updateBullets = () => {
+    setBullets((prev) => prev.map(b => ({ ...b, x: b.x + BULLET_SPEED }))
+      .filter(b => b.x < GAME_WIDTH));
+  };
+
+  const spawnEnemies = () => {
+    if (Math.random() < 0.02) {
+      const y = Math.random() * (GAME_HEIGHT - 40);
+      setEnemies((prev) => [...prev, { x: GAME_WIDTH, y }]);
+    }
+  };
+
+  const updateEnemies = () => {
+    setEnemies((prev) => prev.map(e => ({ ...e, x: e.x - ENEMY_SPEED }))
+      .filter(e => e.x > -40)
+    );
+
+    // 敵弾発射
+    enemies.forEach((enemy) => {
+      if (Math.random() < 0.02) {
+        const dx = player.x - enemy.x;
+        const dy = player.y - enemy.y;
+        const length = Math.sqrt(dx * dx + dy * dy);
+        const vx = (dx / length) * ENEMY_BULLET_SPEED;
+        const vy = (dy / length) * ENEMY_BULLET_SPEED;
+        setEnemyBullets((prev) => [...prev, { x: enemy.x, y: enemy.y, vx, vy }]);
+      }
+    });
+  };
+
+  const updateEnemyBullets = () => {
+    setEnemyBullets((prev) =>
+      prev.map(b => ({ ...b, x: b.x + b.vx, y: b.y + b.vy }))
+        .filter(b => b.x > -20 && b.x < GAME_WIDTH && b.y > -20 && b.y < GAME_HEIGHT)
+    );
+  };
+
+  const checkCollisions = () => {
+    // プレイヤーが敵弾に当たった
+    enemyBullets.forEach((b) => {
+      if (
+        b.x < player.x + 40 &&
+        b.x + 10 > player.x &&
+        b.y < player.y + 40 &&
+        b.y + 10 > player.y
+      ) {
+        setPlayer((prev) => ({ ...prev, life: prev.life - 1 }));
+        setEnemyBullets((prev) => prev.filter(pb => pb !== b));
+      }
+    });
+
+    // 弾が敵に当たった
+    bullets.forEach((b) => {
+      enemies.forEach((e) => {
+        if (
+          b.x < e.x + 40 &&
+          b.x + 10 > e.x &&
+          b.y < e.y + 40 &&
+          b.y + 10 > e.y
+        ) {
+          setEnemies((prev) => prev.filter(ee => ee !== e));
+          setBullets((prev) => prev.filter(bb => bb !== b));
+          setScore((prev) => prev + 100);
+        }
+      });
+    });
+  };
+
+  return (
+    <div
+      style={{
+        width: GAME_WIDTH,
+        height: GAME_HEIGHT,
+        background: "#000",
+        position: "relative",
+        overflow: "hidden",
+        border: "2px solid #fff",
+      }}
+    >
+      {/* プレイヤー */}
+      <div
+        style={{
+          position: "absolute",
+          left: player.x,
+          top: player.y,
+          width: 40,
+          height: 40,
+          background: "cyan",
+        }}
+      />
+
+      {/* 弾 */}
+      {bullets.map((b, i) => (
+        <div
+          key={i}
+          style={{
+            position: "absolute",
+            left: b.x,
+            top: b.y,
+            width: 10,
+            height: 10,
+            background: "yellow",
+          }}
+        />
+      ))}
+
+      {/* 敵 */}
+      {enemies.map((e, i) => (
+        <div
+          key={i}
+          style={{
+            position: "absolute",
+            left: e.x,
+            top: e.y,
+            width: 40,
+            height: 40,
+            background: "red",
+          }}
+        />
+      ))}
+
+      {/* 敵弾 */}
+      {enemyBullets.map((b, i) => (
+        <div
+          key={i}
+          style={{
+            position: "absolute",
+            left: b.x,
+            top: b.y,
+            width: 10,
+            height: 10,
+            background: "orange",
+          }}
+        />
+      ))}
+
+      {/* UI */}
+      <div style={{ position: "absolute", top: 10, left: 10, color: "#fff" }}>
+        Life: {player.life} | Score: {score}
+      </div>
+
+      {/* ゲームオーバー */}
+      {player.life <= 0 && (
+        <div
+          style={{
+            position: "absolute",
+            top: GAME_HEIGHT / 2 - 50,
+            left: GAME_WIDTH / 2 - 100,
+            color: "white",
+            fontSize: 40,
+          }}
+        >
+          GAME OVER
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default App;
 
