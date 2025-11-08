@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef } from "react";
-import "./App.css";
 
 const ROWS = 12;
 const COLS = 6;
